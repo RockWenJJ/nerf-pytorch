@@ -44,7 +44,7 @@ def run_network(inputs, viewdirs, fn, embed_fn, embeddirs_fn, netchunk=1024*64):
         input_dirs = viewdirs[:,None].expand(inputs.shape)
         input_dirs_flat = torch.reshape(input_dirs, [-1, input_dirs.shape[-1]])
         embedded_dirs = embeddirs_fn(input_dirs_flat)
-        embedded = torch.cat([embedded, embedded_dirs], -1)
+        embedded = torch.cat([embedded, embedded_dirs], -1) #NOTE: input is the embedded positions and directions
 
     outputs_flat = batchify(fn, netchunk)(embedded)
     outputs = torch.reshape(outputs_flat, list(inputs.shape[:-1]) + [outputs_flat.shape[-1]])
@@ -109,7 +109,7 @@ def render(H, W, K, chunk=1024*32, rays=None, c2w=None, ndc=True,
         viewdirs = torch.reshape(viewdirs, [-1,3]).float()
 
     sh = rays_d.shape # [..., 3]
-    if ndc:
+    if ndc: #TODO: what does mean?
         # for forward facing scenes
         rays_o, rays_d = ndc_rays(H, W, K[0][0], 1., rays_o, rays_d)
 
@@ -151,7 +151,7 @@ def render_path(render_poses, hwf, K, chunk, render_kwargs, gt_imgs=None, savedi
     for i, c2w in enumerate(tqdm(render_poses)):
         print(i, time.time() - t)
         t = time.time()
-        rgb, disp, acc, _ = render(H, W, K, chunk=chunk, c2w=c2w[:3,:4], **render_kwargs)
+        rgb, disp, acc, render_dict = render(H, W, K, chunk=chunk, c2w=c2w[:3,:4], **render_kwargs)
         rgbs.append(rgb.cpu().numpy())
         disps.append(disp.cpu().numpy())
         if i==0:
@@ -167,6 +167,10 @@ def render_path(render_poses, hwf, K, chunk, render_kwargs, gt_imgs=None, savedi
             rgb8 = to8b(rgbs[-1])
             filename = os.path.join(savedir, '{:03d}.png'.format(i))
             imageio.imwrite(filename, rgb8)
+            if 'depth_map' in render_dict.keys():
+                depth_map = render_dict['depth_map'].cpu().numpy()
+                depth_name = os.path.join(savedir, '{:03d}.npy'.format(i))
+                np.save(depth_name, depth_map)
 
 
     rgbs = np.stack(rgbs, 0)
@@ -274,7 +278,7 @@ def raw2outputs(raw, z_vals, rays_d, raw_noise_std=0, white_bkgd=False, pytest=F
     """
     raw2alpha = lambda raw, dists, act_fn=F.relu: 1.-torch.exp(-act_fn(raw)*dists)
 
-    dists = z_vals[...,1:] - z_vals[...,:-1]
+    dists = z_vals[...,1:] - z_vals[...,:-1] #NOTE: dists is the distance from current point to the last point
     dists = torch.cat([dists, torch.Tensor([1e10]).expand(dists[...,:1].shape)], -1)  # [N_rays, N_samples]
 
     dists = dists * torch.norm(rays_d[...,None,:], dim=-1)
@@ -382,7 +386,7 @@ def render_rays(ray_batch,
 
 
 #     raw = run_network(pts)
-    raw = network_query_fn(pts, viewdirs, network_fn)
+    raw = network_query_fn(pts, viewdirs, network_fn) #NOTE: raw is the renderd rgb and alpha for each space position
     rgb_map, disp_map, acc_map, weights, depth_map = raw2outputs(raw, z_vals, rays_d, raw_noise_std, white_bkgd, pytest=pytest)
 
     if N_importance > 0:
@@ -390,7 +394,7 @@ def render_rays(ray_batch,
         rgb_map_0, disp_map_0, acc_map_0 = rgb_map, disp_map, acc_map
 
         z_vals_mid = .5 * (z_vals[...,1:] + z_vals[...,:-1])
-        z_samples = sample_pdf(z_vals_mid, weights[...,1:-1], N_importance, det=(perturb==0.), pytest=pytest)
+        z_samples = sample_pdf(z_vals_mid, weights[...,1:-1], N_importance, det=(perturb==0.), pytest=pytest) #NOTE: sample points where there is higher pdf
         z_samples = z_samples.detach()
 
         z_vals, _ = torch.sort(torch.cat([z_vals, z_samples], -1), -1)
@@ -402,7 +406,7 @@ def render_rays(ray_batch,
 
         rgb_map, disp_map, acc_map, weights, depth_map = raw2outputs(raw, z_vals, rays_d, raw_noise_std, white_bkgd, pytest=pytest)
 
-    ret = {'rgb_map' : rgb_map, 'disp_map' : disp_map, 'acc_map' : acc_map}
+    ret = {'rgb_map' : rgb_map, 'disp_map' : disp_map, 'acc_map' : acc_map, 'depth_map': depth_map, 'z_vals':z_vals}
     if retraw:
         ret['raw'] = raw
     if N_importance > 0:
@@ -574,7 +578,7 @@ def train():
         near = 2.
         far = 6.
 
-        if args.white_bkgd:
+        if args.white_bkgd: #NOTE: 1 is background
             images = images[...,:3]*images[...,-1:] + (1.-images[...,-1:])
         else:
             images = images[...,:3]
@@ -735,7 +739,7 @@ def train():
             if N_rand is not None:
                 rays_o, rays_d = get_rays(H, W, K, torch.Tensor(pose))  # (H, W, 3), (H, W, 3)
 
-                if i < args.precrop_iters:
+                if i < args.precrop_iters: # NOTE: To prevent sampling too concentrated in some region
                     dH = int(H//2 * args.precrop_frac)
                     dW = int(W//2 * args.precrop_frac)
                     coords = torch.stack(

@@ -100,19 +100,20 @@ class NeRF(nn.Module):
             h = self.pts_linears[i](h)
             h = F.relu(h)
             if i in self.skips:
-                h = torch.cat([input_pts, h], -1)
+                h = torch.cat([input_pts, h], -1) # N, 256+63
+        #NOTE: the last h has shape N x 256
 
         if self.use_viewdirs:
-            alpha = self.alpha_linear(h)
-            feature = self.feature_linear(h)
-            h = torch.cat([feature, input_views], -1)
+            alpha = self.alpha_linear(h) #NOTE: alpha's shape N x 1
+            feature = self.feature_linear(h) #NOTE: feature'shape N x 256
+            h = torch.cat([feature, input_views], -1) # NOTE: h's shape: N x (256+27)
         
             for i, l in enumerate(self.views_linears):
                 h = self.views_linears[i](h)
                 h = F.relu(h)
-
-            rgb = self.rgb_linear(h)
-            outputs = torch.cat([rgb, alpha], -1)
+            #NOTE: the last h has shape N x 128
+            rgb = self.rgb_linear(h) #NOTE: rgb has shape N x 3
+            outputs = torch.cat([rgb, alpha], -1) #NOTE: outputes has shape N x 4
         else:
             outputs = self.output_linear(h)
 
