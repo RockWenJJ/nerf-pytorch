@@ -168,7 +168,7 @@ def recenter_poses(poses):
     poses_ = poses+0
     bottom = np.reshape([0,0,0,1.], [1,4])
     c2w = poses_avg(poses)
-    c2w = np.concatenate([c2w[:3,:4], bottom], -2)
+    c2w = np.concatenate([c2w[:3,:4], bottom], -2) #NOTE: this is the new world center
     bottom = np.tile(np.reshape(bottom, [1,1,4]), [poses.shape[0],1,1])
     poses = np.concatenate([poses[:,:3,:4], bottom], -2)
 
@@ -297,7 +297,7 @@ def load_llff_data(basedir, factor=8, recenter=True, bd_factor=.75, spherify=Fal
             N_views/=2
 
         # Generate poses for spiral path
-        render_poses = render_path_spiral(c2w_path, up, rads, focal, zdelta, zrate=.5, rots=N_rots, N=N_views)
+        render_poses = render_path_spiral(c2w_path, up, rads, focal, zdelta, zrate=.5, rots=N_rots, N=N_views) #NOTE: generate poses for rendering
         
         
     render_poses = np.array(render_poses).astype(np.float32)

@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from load_blender import load_blender_data
+from load_llff import load_llff_data
 from mpl_toolkits.mplot3d import Axes3D
 
 def set_axes_equal(ax):
@@ -29,14 +30,18 @@ def set_axes_equal(ax):
     ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
     ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
 
-datadir = './data/nerf_synthetic/lego'
 
-imgs, poses, render_poses, hwf, i_split = load_blender_data(datadir, half_res=False, testskip=8)
+# lego
+# datadir = './data/nerf_synthetic/lego'
+# imgs, poses, render_poses, hwf, i_split = load_blender_data(datadir, half_res=False, testskip=8)
+# llff
+datadir = './data/nerf_llff_data/fern'
+images, poses, bds, render_poses, i_test = load_llff_data(datadir, 8, recenter=True, bd_factor=.75, spherify=False)
 
 fig = plt.figure()
 mycmap = plt.get_cmap('rainbow')
 ax = fig.add_subplot(projection='3d')
-for i, pose in enumerate(poses[:10]):
+for i, pose in enumerate(poses):
     x, y, z = pose[0][3], pose[1][3], pose[2][3]
     U = [pose[0][0], pose[1][0], pose[2][0]]
     V = [pose[0][1], pose[1][1], pose[2][1]]

@@ -162,7 +162,6 @@ def get_rays(H, W, K, c2w):
     rays_o = c2w[:3,-1].expand(rays_d.shape)
     return rays_o, rays_d
 
-
 def get_rays_np(H, W, K, c2w):
     i, j = np.meshgrid(np.arange(W, dtype=np.float32), np.arange(H, dtype=np.float32), indexing='xy')
     dirs = np.stack([(i-K[0][2])/K[0][0], -(j-K[1][2])/K[1][1], -np.ones_like(i)], -1)
@@ -171,7 +170,6 @@ def get_rays_np(H, W, K, c2w):
     # Translate camera frame's origin to the world frame. It is the origin of all rays.
     rays_o = np.broadcast_to(c2w[:3,-1], np.shape(rays_d))
     return rays_o, rays_d
-
 
 def ndc_rays(H, W, focal, near, rays_o, rays_d):
     # Shift ray origins to near plane

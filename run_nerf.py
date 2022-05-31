@@ -18,6 +18,7 @@ from load_deepvoxels import load_dv_data
 from load_blender import load_blender_data
 from load_LINEMOD import load_LINEMOD_data
 
+import wandb
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 np.random.seed(0)
@@ -146,6 +147,7 @@ def render_path(render_poses, hwf, K, chunk, render_kwargs, gt_imgs=None, savedi
 
     rgbs = []
     disps = []
+    rgb8s = []
 
     t = time.time()
     for i, c2w in enumerate(tqdm(render_poses)):
@@ -167,16 +169,27 @@ def render_path(render_poses, hwf, K, chunk, render_kwargs, gt_imgs=None, savedi
             rgb8 = to8b(rgbs[-1])
             filename = os.path.join(savedir, '{:03d}.png'.format(i))
             imageio.imwrite(filename, rgb8)
+            rgb8s.append(rgb8)
             if 'depth_map' in render_dict.keys():
                 depth_map = render_dict['depth_map'].cpu().numpy()
-                depth_name = os.path.join(savedir, '{:03d}.npy'.format(i))
+                depth_name = os.path.join(savedir, 'depth_{:03d}.npy'.format(i))
                 np.save(depth_name, depth_map)
-
+            if 'raw' in render_dict.keys() and i == 0:
+                raw = render_dict['raw'].cpu().numpy()
+                raw_name = os.path.join(savedir, 'raw_{:03d}.npy'.format(i))
+                np.save(raw_name, raw)
+            if 'z_vals' in render_dict.keys() and i == 0:
+                z_vals = render_dict['z_vals'].cpu().numpy()
+                z_vals_name = os.path.join(savedir, 'zval_{:03d}.npy'.format(i))
+                np.save(z_vals_name, z_vals)
 
     rgbs = np.stack(rgbs, 0)
     disps = np.stack(disps, 0)
-
-    return rgbs, disps
+    if len(rgb8s) > 0:
+        rgb8s = np.concatenate(rgb8s, 1)
+    else:
+        rgb8s = None
+    return rgbs, disps, rgb8s
 
 
 def create_nerf(args):
@@ -299,7 +312,7 @@ def raw2outputs(raw, z_vals, rays_d, raw_noise_std=0, white_bkgd=False, pytest=F
     weights = alpha * torch.cumprod(torch.cat([torch.ones((alpha.shape[0], 1)), 1.-alpha + 1e-10], -1), -1)[:, :-1]
     rgb_map = torch.sum(weights[...,None] * rgb, -2)  # [N_rays, 3]
 
-    depth_map = torch.sum(weights * z_vals, -1)
+    depth_map = torch.sum(weights * z_vals, -1)  #NOTE: compute the expected depth, weights is just the density map
     disp_map = 1./torch.max(1e-10 * torch.ones_like(depth_map), depth_map / torch.sum(weights, -1))
     acc_map = torch.sum(weights, -1)
 
@@ -434,6 +447,8 @@ def config_parser():
                         help='where to store ckpts and logs')
     parser.add_argument("--datadir", type=str, default='./data/llff/fern', 
                         help='input data directory')
+    parser.add_argument('--wandb', type=int, default=0, help='whether to use wandb')
+    parser.add_argument('--max_iter', type=int, default=200000, help='max training iterations')
 
     # training options
     parser.add_argument("--netdepth", type=int, default=8, 
@@ -452,6 +467,8 @@ def config_parser():
                         help='exponential learning rate decay (in 1000 steps)')
     parser.add_argument("--chunk", type=int, default=1024*32, 
                         help='number of rays processed in parallel, decrease if running out of memory')
+    parser.add_argument("--test_chunk", type=int, default=1024,
+                        help='number of rays processed in parallel when test')
     parser.add_argument("--netchunk", type=int, default=1024*64, 
                         help='number of pts sent through network in parallel, decrease if running out of memory')
     parser.add_argument("--no_batching", action='store_true', 
@@ -539,6 +556,10 @@ def train():
 
     parser = config_parser()
     args = parser.parse_args()
+
+    #init wandb
+    if args.wandb:
+        wandb_logger = wandb.init(project='NeRF', config=args, name=args.expname)
 
     # Load data
     K = None
@@ -669,7 +690,7 @@ def train():
             os.makedirs(testsavedir, exist_ok=True)
             print('test poses shape', render_poses.shape)
 
-            rgbs, _ = render_path(render_poses, hwf, K, args.chunk, render_kwargs_test, gt_imgs=images, savedir=testsavedir, render_factor=args.render_factor)
+            rgbs, _, _ = render_path(render_poses, hwf, K, args.chunk, render_kwargs_test, gt_imgs=images, savedir=testsavedir, render_factor=args.render_factor)
             print('Done rendering', testsavedir)
             imageio.mimwrite(os.path.join(testsavedir, 'video.mp4'), to8b(rgbs), fps=30, quality=8)
 
@@ -702,7 +723,7 @@ def train():
         rays_rgb = torch.Tensor(rays_rgb).to(device)
 
 
-    N_iters = 200000 + 1
+    N_iters = args.max_iter + 1
     print('Begin')
     print('TRAIN views are', i_train)
     print('TEST views are', i_test)
@@ -793,7 +814,7 @@ def train():
         #####           end            #####
 
         # Rest is logging
-        if i%args.i_weights==0:
+        if i%args.i_weights==0 and i > 0:
             path = os.path.join(basedir, expname, '{:06d}.tar'.format(i))
             torch.save({
                 'global_step': global_step,
@@ -806,7 +827,7 @@ def train():
         if i%args.i_video==0 and i > 0:
             # Turn on testing mode
             with torch.no_grad():
-                rgbs, disps = render_path(render_poses, hwf, K, args.chunk, render_kwargs_test)
+                rgbs, disps, _ = render_path(render_poses, hwf, K, args.test_chunk, render_kwargs_test)
             print('Done, saving', rgbs.shape, disps.shape)
             moviebase = os.path.join(basedir, expname, '{}_spiral_{:06d}_'.format(expname, i))
             imageio.mimwrite(moviebase + 'rgb.mp4', to8b(rgbs), fps=30, quality=8)
@@ -824,12 +845,17 @@ def train():
             os.makedirs(testsavedir, exist_ok=True)
             print('test poses shape', poses[i_test].shape)
             with torch.no_grad():
-                render_path(torch.Tensor(poses[i_test]).to(device), hwf, K, args.chunk, render_kwargs_test, gt_imgs=images[i_test], savedir=testsavedir)
+                render_kwargs_test['retraw'] = True
+                _, _, rgb8s = render_path(torch.Tensor(poses[i_test]).to(device), hwf, K, args.test_chunk, render_kwargs_test, gt_imgs=images[i_test], savedir=testsavedir)
+            if args.wandb and rgb8s is not None:
+                wandb_rgb8s = wandb.Image(rgb8s)
+                wandb_logger.log({"rendered":wandb_rgb8s}, i)
             print('Saved test set')
 
-
     
-        if i%args.i_print==0:
+        if i%args.i_print==0 and i > 0:
+            if args.wandb:
+                wandb_logger.log({'loss':loss.item(), 'PSNR':psnr.item()}, i)
             tqdm.write(f"[TRAIN] Iter: {i} Loss: {loss.item()}  PSNR: {psnr.item()}")
         """
             print(expname, i, psnr.numpy(), loss.numpy(), global_step.numpy())
