@@ -1,4 +1,4 @@
-expname = watertv_220531
+expname = watertv_220601
 basedir = ./logs
 datadir = ./data/nerf_llff_data/underwater_tv_selected
 dataset_type = llff

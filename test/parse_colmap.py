@@ -3,11 +3,13 @@ import numpy as np
 import math
 from scipy.spatial.transform import Rotation as R
 
-path = "/mnt/03_Data/MyUnderwaterDataset/selected_images/sparse"
-selected_index = list(range(1180, 1235, 2))
+path = "/home/wenjj/Documents/01_Projects/nerf-pytorch/data/nerf_llff_data/apple_banana/sparse"
+
 
 images = os.path.join(path, 'images.txt')
 cameras = os.path.join(path, 'cameras.txt')
+# selected_index = list(range(1180, 1235, 2))
+selected_index = list(range(1, 18))
 
 cameras_result = {}
 with open(cameras, 'r') as f:
@@ -22,7 +24,7 @@ images_result = {}
 with open(images, 'r') as f:
     lines = f.readlines()
     for line in lines:
-        if line.endswith('.png\n'):
+        if line.endswith('.png\n') or line.endswith('.jpg\n'):
             parts = line.split(' ')
             index = int(parts[0])
             key = int(parts[-1].split('.')[0])
