@@ -1,6 +1,6 @@
-expname = apple_banana_220606
+expname = applecup_20220606
 basedir = ./logs
-datadir = ./data/nerf_llff_data/apple_banana
+datadir = ./data/nerf_llff_data/applecup
 dataset_type = llff
 
 factor = 8

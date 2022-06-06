@@ -31,11 +31,12 @@ def set_axes_equal(ax):
     ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
 
 
-# lego
+# # lego
 # datadir = './data/nerf_synthetic/lego'
 # imgs, poses, render_poses, hwf, i_split = load_blender_data(datadir, half_res=False, testskip=8)
 # llff
-datadir = './data/nerf_llff_data/fern'
+# datadir = './data/nerf_llff_data/fern'
+datadir = './data/nerf_llff_data/apple_banana'
 images, poses, bds, render_poses, i_test = load_llff_data(datadir, 8, recenter=True, bd_factor=.75, spherify=False)
 
 fig = plt.figure()

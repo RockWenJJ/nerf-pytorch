@@ -3,13 +3,14 @@ import numpy as np
 import math
 from scipy.spatial.transform import Rotation as R
 
-path = "/home/wenjj/Documents/01_Projects/nerf-pytorch/data/nerf_llff_data/apple_banana/sparse"
+path = "./data/nerf_llff_data/underwater_tv_selected/sparse"
+outpath = "./data/nerf_llff_data/underwater_tv_selected"
 
 
 images = os.path.join(path, 'images.txt')
 cameras = os.path.join(path, 'cameras.txt')
-# selected_index = list(range(1180, 1235, 2))
-selected_index = list(range(1, 18))
+selected_index = list(range(1180, 1235, 2))
+# selected_index = list(range(1, 18))
 
 cameras_result = {}
 with open(cameras, 'r') as f:
@@ -34,7 +35,7 @@ with open(images, 'r') as f:
             qw, qx, qy, qz = float(parts[1]), float(parts[2]), float(parts[3]), float(parts[4])
             r = R.from_quat([qx, qy, qz, qw])
             Rm = r.as_matrix()
-            tx, ty, tz = float(parts[5]), float(parts[6]), float(parts[7])
+            tx, ty, tz = float(parts[5])/20., float(parts[6])/20., float(parts[7])/20.
             T[:3, :3] = Rm
             T[:3, 3] = np.array([tx, ty, tz])
             T[:3, 4] = cameras_result[index]
@@ -54,7 +55,7 @@ for key in keys:
         poses_bounds[i, :-2] = images_result[key].flatten()
         poses_bounds[i, -2:] = np.array([0.5, 10.])
         i += 1
-np.save("poses_bounds.npy", poses_bounds)
+np.save(os.path.join(outpath, "poses_bounds.npy"), poses_bounds)
 # print("test")
 
 # print("result")
