@@ -24,6 +24,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 np.random.seed(0)
 DEBUG = False
 
+os.environ["WANDB_MODE"] = "dryrun"
 
 def batchify(fn, chunk):
     """Constructs a version of 'fn' that applies to smaller batches.
@@ -33,7 +34,6 @@ def batchify(fn, chunk):
     def ret(inputs):
         return torch.cat([fn(inputs[i:i+chunk]) for i in range(0, inputs.shape[0], chunk)], 0)
     return ret
-
 
 def run_network(inputs, viewdirs, fn, embed_fn, embeddirs_fn, netchunk=1024*64):
     """Prepares inputs and applies network 'fn'.
@@ -50,7 +50,6 @@ def run_network(inputs, viewdirs, fn, embed_fn, embeddirs_fn, netchunk=1024*64):
     outputs_flat = batchify(fn, netchunk)(embedded)
     outputs = torch.reshape(outputs_flat, list(inputs.shape[:-1]) + [outputs_flat.shape[-1]])
     return outputs
-
 
 def batchify_rays(rays_flat, chunk=1024*32, **kwargs):
     """Render rays in smaller minibatches to avoid OOM.
@@ -566,6 +565,7 @@ def train():
     if args.dataset_type == 'llff':
         images, poses, bds, render_poses, i_test = load_llff_data(args.datadir, args.factor,
                                                                   recenter=True, bd_factor=.75,
+                                                                  # recenter=True, bd_factor=1.0,
                                                                   spherify=args.spherify)
         hwf = poses[0,:3,-1]
         poses = poses[:,:3,:4]
